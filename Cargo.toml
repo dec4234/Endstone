@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.52"
 tokio = { version = "0.2.25" }
 mcproto-rs = { git = "https://github.com/Twister915/mcproto-rs", branch = "master" }
 mctokio = { git = "https://github.com/Twister915/mctokio", branch = "master", version = "0.1" }
