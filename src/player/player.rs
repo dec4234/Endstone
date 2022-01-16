@@ -130,7 +130,7 @@ impl MinecraftConnection {
                     }
                 }
             } else {
-                return Err(anyhow!("Cannot handshake as a client without next state"));
+                return Err(anyhow!("Cannot handshake as a player without next state"));
             }
         }
     }

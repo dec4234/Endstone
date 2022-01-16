@@ -1,8 +1,12 @@
+extern crate mctokio;
+extern crate mcproto_rs;
+extern crate tokio;
+
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::net::TcpListener;
+use crate::player::player::MinecraftConnection;
 
-#[path = "client/MinecraftConnection.rs"]
-mod MinecraftConnection;
+mod player;
 
 #[tokio::main]
 async fn main() {
@@ -13,7 +17,7 @@ async fn main() {
         if let Ok(listener) = &mut listener {
             loop {
                 if let Ok((socket, address)) = listener.accept().await {
-                    let mut connection = MinecraftConnection::MinecraftConnection::from_tcp_stream(socket);
+                    let mut connection = MinecraftConnection::from_tcp_stream(socket);
                     if let Ok(packet) = connection.read_next_packet().await {
                         if let Some(packet) = packet {
                             println!("{:?}", packet);
