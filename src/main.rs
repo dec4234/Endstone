@@ -4,9 +4,9 @@ extern crate tokio;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::net::TcpListener;
-use crate::player::player::MinecraftConnection;
+use crate::server::player::MinecraftConnection;
 
-mod player;
+mod server;
 
 #[tokio::main]
 async fn main() {
