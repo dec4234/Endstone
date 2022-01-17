@@ -1,15 +1,12 @@
-extern crate mctokio;
-extern crate mcproto_rs;
-extern crate tokio;
-
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::net::TcpListener;
 use crate::server::player::MinecraftConnection;
+use anyhow::Result;
 
 mod server;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 25565);
 
     let connect = async {
@@ -28,5 +25,7 @@ async fn main() {
         }
     };
 
-    connect.await
+    connect.await;
+
+    Ok(())
 }

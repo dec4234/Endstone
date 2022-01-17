@@ -3,6 +3,7 @@ use mctokio::{TcpConnection, TcpReadBridge, TcpWriteBridge};
 use tokio::net::TcpStream;
 use mcproto_rs::v1_16_3::{Packet753 as Packet, RawPacket753 as RawPacket};
 use anyhow::Result;
+use mcproto_rs::uuid::UUID4;
 
 pub struct MinecraftConnection {
     reader: TcpReadBridge,
@@ -32,6 +33,22 @@ impl MinecraftConnection {
             Ok(Some(mcproto_rs::protocol::RawPacket::deserialize(&raw)?))
         } else {
             Ok(None)
+        }
+    }
+}
+
+pub struct Player {
+    uuid: UUID4,
+    name: String,
+    connection: MinecraftConnection,
+}
+
+impl Player {
+    pub fn from_connection(uuid: UUID4, name: String, connection: MinecraftConnection) -> Player {
+        Self {
+            uuid,
+            name,
+            connection,
         }
     }
 }
