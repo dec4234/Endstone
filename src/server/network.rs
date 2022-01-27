@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::{Arc};
 use mcproto_rs::status::{StatusFaviconSpec, StatusPlayersSpec, StatusSpec, StatusVersionSpec};
-use mcproto_rs::types::{Chat, CountedArray, VarInt};
+use mcproto_rs::types::{Chat, CountedArray, EntityLocation, EntityRotation, NamedNbtTag, RemainingBytes, VarInt, Vec3};
 use mcproto_rs::uuid::UUID4;
 use mctokio::{Bridge, TcpConnection, TcpReadBridge, TcpWriteBridge};
 use tokio::runtime::Runtime;
@@ -13,83 +13,13 @@ use mcproto_rs::protocol::State::Play;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::Receiver;
 use mcproto_rs::{v1_16_3 as proto};
-use mcproto_rs::v1_16_3::{ChatPosition, HandshakeNextState, LoginEncryptionRequestSpec, LoginSetCompressionSpec, LoginSuccessSpec, Packet753 as Packet, Packet753, PreviousGameMode, RawPacket753 as RawPacket, StatusResponseSpec};
+use mcproto_rs::nbt::{NamedTag, Tag};
+use mcproto_rs::v1_16_3::{AdvancementMappingEntrySpec, ChatPosition, GameMode, HandshakeNextState, LoginEncryptionRequestSpec, LoginSetCompressionSpec, LoginSuccessSpec, Packet753 as Packet, Packet753, PlayClientPluginMessageSpec, PlayServerPlayerPositionAndLookSpec, PositionAndLookFlags, PreviousGameMode, RawPacket753 as RawPacket, StatusResponseSpec};
+use mcproto_rs::v1_16_3::CommandParserSpec::NbtCompoundTag;
+use mcproto_rs::v1_16_3::Packet753::{PlayClientPluginMessage, PlayServerPlayerPositionAndLook};
+use tokio::io::AsyncWriteExt;
 use crate::server::player::Player;
-
-pub struct Client {
-    reader: Arc<Mutex<TcpReadBridge>>,
-    writer: Arc<Mutex<TcpWriteBridge>>,
-}
-
-impl Client {
-    pub fn new(stream: TcpConnection) -> Self {
-        Self {
-            reader: Arc::new(Mutex::new(stream.reader)),
-            writer: Arc::new(Mutex::new(stream.writer)),
-        }
-    }
-
-    pub fn from_tcp_stream(connection: TcpStream) -> Self {
-        Self::new(TcpConnection::from_client_connection(connection))
-    }
-
-    pub async fn write_packet(&mut self, packet: Packet) -> Result<()> {
-        println!("Server -> Client: {:?}", packet);
-        self.writer.lock().await.write_packet(packet).await
-    }
-
-    pub async fn read_next_packet(&mut self) -> Result<Option<Packet>> {
-        if let Some(raw) = self.reader.lock().await.read_packet::<RawPacket>().await? {
-            let packet = mcproto_rs::protocol::RawPacket::deserialize(&raw)?;
-            println!("Client -> Server: {:?}", packet);
-            Ok(Some(packet))
-        } else {
-            Ok(None)
-        }
-    }
-
-    pub async fn handshake(&mut self) -> Result<State> {
-        let first = self.read_next_packet().await;
-        if let Ok(first) = first {
-            if let Some(Packet::Handshake(body)) = first {
-                match body.next_state {
-                    HandshakeNextState::Status => {
-                        self.set_state(State::Status).await;
-                        return Ok(State::Status);
-                    }
-                    HandshakeNextState::Login => {
-                        self.set_state(State::Login).await;
-                        return Ok(State::Login);
-                    }
-                }
-            } else {
-                return Err(anyhow!("Did not receive handshake"));
-            }
-        } else {
-            return Err(first.err().unwrap());
-        }
-    }
-
-    pub async fn set_state(&mut self, state: State) {
-        self.reader.lock().await.set_state(state.clone());
-        self.writer.lock().await.set_state(state);
-    }
-
-    pub async fn set_compression_threshold(&mut self, threshold: i32) {
-        self.reader.lock().await.set_compression_threshold(Some(threshold));
-        self.writer.lock().await.set_compression_threshold(Some(threshold));
-    }
-
-    pub async fn enable_encryption(&mut self, key: &[u8], iv: &[u8]) -> Result<()> {
-        let reader = self.reader.lock().await.enable_encryption(key, iv);
-
-        if let Err(error) = reader {
-            Err(error)
-        } else {
-            self.writer.lock().await.enable_encryption(key, iv)
-        }
-    }
-}
+use crate::server::client::Client;
 
 pub type NameUUID = (String, UUID4);
 pub type ConnectedClients = Arc<Mutex<HashMap<Arc<NameUUID>, Arc<Mutex<ServerClient>>>>>;
@@ -351,13 +281,11 @@ impl Server {
                 }
             };
 
-            /*
             if let Err(error) = client.write_packet(LoginSetCompression(response)).await {
                 return Err(error);
             } else {
                 client.set_compression_threshold(compression_threhold).await;
             }
-             */
 
             if let Err(error) = client.write_packet(LoginSuccess(LoginSuccessSpec {
                 username: result.0.clone(),
@@ -368,6 +296,8 @@ impl Server {
             }
 
             client.set_state(Play).await;
+
+
             return Ok(result);
         } else {
             return Err(anyhow!("Client did not follow up with Login start"));
@@ -453,7 +383,6 @@ impl Server {
             ));
         }
     }
-
 }
 
 #[allow(dead_code)]
@@ -489,26 +418,228 @@ impl ServerClient {
         self.connection.write_packet(PlayDisconnect(spec)).await
     }
 
+    /*
+    1. Implement NBTMap (see NBTMap in MCHPRS)
+    2. Possibly implement temporary local wrapper for codecs
+    3. Abandon mc-proto and go to MCHPRS protocol implementation
+     */
     pub async fn join_world(&mut self, is_hardcore: bool, max_players: i32) -> Result<()> {
+        let tag = Tag::Compound(vec![
+            NamedTag {
+                name: String::from("piglin_safe"),
+                payload: Tag::Byte(1),
+            },
+            NamedTag {
+                name: String::from("natural"),
+                payload: Tag::Byte(1),
+            },
+            NamedTag {
+                name: String::from("ambient_light"),
+                payload: Tag::Float(1.0),
+            },
+            NamedTag {
+                name: String::from("fixed_time"),
+                payload: Tag::Long(1),
+            },
+            NamedTag {
+                name: String::from("infiniburn"),
+                payload: Tag::String(String::from("minecraft:infiniburn_overworld")),
+            },
+            NamedTag {
+                name: String::from("respawn_anchor_works"),
+                payload: Tag::Byte(0),
+            },
+            NamedTag {
+                name: String::from("has_skylight"),
+                payload: Tag::Byte(1),
+            },
+            NamedTag {
+                name: String::from("bed_works"),
+                payload: Tag::Byte(1),
+            },
+            NamedTag {
+                name: String::from("effects"),
+                payload: Tag::String(String::from("minecraft:overworld"))
+            },
+            NamedTag {
+                name: String::from("has_raids"),
+                payload: Tag::Byte(0),
+            },
+            NamedTag {
+                name: String::from("min_y"),
+                payload: Tag::Int(0),
+            },
+            NamedTag {
+                name: String::from("height"),
+                payload: Tag::Int(256),
+            },
+            NamedTag {
+                name: String::from("logical_height"),
+                payload: Tag::Int(256),
+            },
+            NamedTag {
+                name: String::from("coordinate_scale"),
+                payload: Tag::Float(1.0),
+            },
+            NamedTag {
+                name: String::from("ultrawarm"),
+                payload: Tag::Byte(0),
+            },
+            NamedTag {
+                name: String::from("has_ceiling"),
+                payload: Tag::Byte(0),
+            },
+        ]);
+
+        let dimension_type = NamedTag {
+            name: String::from(""),
+            payload: Tag::Compound(vec![
+                NamedTag {
+                    name: String::from("minecraft:dimension_type"),
+                    payload: Tag::Compound(vec![
+                        NamedTag {
+                            name: String::from("type"),
+                            payload: Tag::String(String::from("minecraft:dimension_type")),
+                        },
+                        NamedTag {
+                            name: String::from("value"),
+                            payload: Tag::List(
+                                vec![Tag::Compound(vec![
+                                    NamedTag {
+                                        name: String::from("name"),
+                                        payload: Tag::String(String::from("minecraft:overworld")),
+                                    },
+                                    NamedTag {
+                                        name: String::from("id"),
+                                        payload: Tag::Int(0),
+                                    },
+                                    NamedTag {
+                                        name: String::from("element"),
+                                        payload: tag
+                                    },
+                                ])]
+                            ),
+                        },
+                    ]),
+                },
+            ]),
+        };
+
+        let biome = NamedTag {
+            name: String::from(""),
+            payload: Tag::Compound(vec![
+                NamedTag {
+                    name: String::from("precipitation"),
+                    payload: Tag::String(String::from("rain")),
+                },
+                NamedTag {
+                    name: String::from("effects"),
+                    payload: Tag::String(String::from("minecraft:overworld")),
+                },
+                NamedTag {
+                    name: String::from("depth"),
+                    payload: Tag::Float(-1.0),
+                },
+                NamedTag {
+                    name: String::from("temperature"),
+                    payload: Tag::Float(0.5),
+                },
+                NamedTag {
+                    name: String::from("scale"),
+                    payload: Tag::Float(0.1),
+                },
+                NamedTag {
+                    name: String::from("downfall"),
+                    payload: Tag::Float(0.5),
+                },
+                NamedTag {
+                    name: String::from("category"),
+                    payload: Tag::String(String::from("none")),
+                },
+                NamedTag {
+                    name: String::from("infiniburn"),
+                    payload: Tag::String(String::from("minecraft:infiniburn_overworld"))
+                },
+                NamedTag {
+                    name: String::from("logical_height"),
+                    payload: Tag::Int(256),
+                },
+                NamedTag {
+                    name: String::from("ambient_light"),
+                    payload: Tag::Float(9.0),
+                },
+                NamedTag {
+                    name: String::from("has_raids"),
+                    payload: Tag::Byte(1),
+                },
+                NamedTag {
+                    name: String::from("respawn_anchor_works"),
+                    payload: Tag::Byte(0),
+                }
+            ]),
+        };
+
         let spec = proto::PlayJoinGameSpec {
             gamemode: self.player.gamemode.clone(),
             previous_gamemode: PreviousGameMode::NoPrevious,
             entity_id: self.player.entity_id,
             is_hardcore,
-            worlds: mcproto_rs::types::CountedArray::from(vec![String::from("world"), String::from("nether")]),
-            dimension_codec: mcproto_rs::types::NamedNbtTag { root: mcproto_rs::nbt::NamedTag { name: String::from("oxide"), payload: mcproto_rs::nbt::Tag::End } },
-            dimension: mcproto_rs::types::NamedNbtTag { root: mcproto_rs::nbt::NamedTag { name: String::from("oxide"), payload: mcproto_rs::nbt::Tag::End } },
+            worlds: CountedArray::from(vec![String::from("world")]),
+            dimension_codec: NamedNbtTag {
+                root: dimension_type.clone()
+            },
+            dimension: NamedNbtTag {
+                root: biome.clone()
+            },
             world_name: String::from("world"),
             hashed_seed: 0,
             max_players: VarInt::from(max_players),
-            view_distance: mcproto_rs::types::VarInt::from(self.view_distance),
+            view_distance: VarInt::from(self.view_distance),
             enable_respawn_screen: false,
             is_flat: false,
             is_debug: false,
             reduced_debug_info: true,
         };
 
-        self.connection.write_packet(Packet::PlayJoinGame(spec)).await
+        println!("{:?}", Packet::PlayJoinGame(spec.clone()));
+
+        self.connection.write_packet(Packet::PlayJoinGame(spec)).await;
+
+        let brand = PlayClientPluginMessageSpec {
+            channel: String::from("minecraft:brand"),
+            data: RemainingBytes {
+                data: {
+                    let mut data = Vec::new();
+                    data.write("Endstone 1.16.3".as_bytes()).await;
+                    data
+                }
+            },
+        };
+
+        self.connection.write_packet(PlayClientPluginMessage(brand)).await;
+
+
+        /*
+        let pos_and_look = PlayServerPlayerPositionAndLookSpec {
+            teleport_id: VarInt::from(0),
+            location: EntityLocation {
+                position: Vec3 {
+                    x: 0.0,
+                    y: 60.0,
+                    z: 0.0,
+                },
+                rotation: EntityRotation {
+                    pitch: 0.0,
+                    yaw: 0.0,
+                },
+            },
+            flags: PositionAndLookFlags(0x01),
+        };
+
+        self.connection.write_packet(PlayServerPlayerPositionAndLook(pos_and_look));
+
+         */
+        Ok(())
     }
 }
 
