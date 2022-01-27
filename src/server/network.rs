@@ -575,6 +575,34 @@ impl ServerClient {
                 NamedTag {
                     name: String::from("respawn_anchor_works"),
                     payload: Tag::Byte(0),
+                },
+                NamedTag {
+                    name: String::from("bed_works"),
+                    payload: Tag::Byte(1),
+                },
+                NamedTag {
+                    name: String::from("piglin_safe"),
+                    payload: Tag::Byte(0),
+                },
+                NamedTag {
+                    name: String::from("coordinate_scale"),
+                    payload: Tag::Float(1.0),
+                },
+                NamedTag {
+                    name: String::from("ultrawarm"),
+                    payload: Tag::Byte(0),
+                },
+                NamedTag {
+                    name: String::from("has_ceiling"),
+                    payload: Tag::Byte(0),
+                },
+                NamedTag {
+                    name: String::from("has_skylight"),
+                    payload: Tag::Byte(1),
+                },
+                NamedTag {
+                    name: String::from("natural"),
+                    payload: Tag::Byte(1),
                 }
             ]),
         };
