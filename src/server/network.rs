@@ -646,8 +646,6 @@ impl ServerClient {
 
         self.connection.write_packet(PlayClientPluginMessage(brand)).await;
 
-
-        /*
         let pos_and_look = PlayServerPlayerPositionAndLookSpec {
             teleport_id: VarInt::from(0),
             location: EntityLocation {
@@ -664,9 +662,10 @@ impl ServerClient {
             flags: PositionAndLookFlags(0x01),
         };
 
-        self.connection.write_packet(PlayServerPlayerPositionAndLook(pos_and_look));
+        self.connection.write_packet(PlayServerPlayerPositionAndLook(pos_and_look)).await;
 
-         */
+
+
         Ok(())
     }
 }
