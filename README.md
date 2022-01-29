@@ -4,6 +4,9 @@ An in-progress Minecraft Server implementation in Rust.
 ## Use
 Currently, you must clone the project yourself and run using ```cargo run```
 
+Endstone currently supports Java Edition version **1.16.3** (Protocol 753).
+The server is run on ```localhost:25565```
+
 ## Libraries
 **[MCPROTO-RS](https://github.com/Twister915/mcproto-rs)** - Used to manipulate and set up packets to be sent using MCTokio
 
