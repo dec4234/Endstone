@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::{Arc};
 use mcproto_rs::status::{StatusFaviconSpec, StatusPlayersSpec, StatusSpec, StatusVersionSpec};
-use mcproto_rs::types::{Chat, CountedArray, EntityLocation, EntityRotation, NamedNbtTag, RemainingBytes, VarInt, Vec3};
+use mcproto_rs::types::{Chat, ChunkPosition, CountedArray, EntityLocation, EntityRotation, NamedNbtTag, RemainingBytes, VarInt, Vec3};
 use mcproto_rs::uuid::UUID4;
 use mctokio::{Bridge, TcpConnection, TcpReadBridge, TcpWriteBridge};
 use tokio::runtime::Runtime;
@@ -14,7 +14,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::Receiver;
 use mcproto_rs::{v1_16_3 as proto};
 use mcproto_rs::nbt::{NamedTag, Tag};
-use mcproto_rs::v1_16_3::{AdvancementMappingEntrySpec, ChatPosition, GameMode, HandshakeNextState, LoginEncryptionRequestSpec, LoginSetCompressionSpec, LoginSuccessSpec, Packet753 as Packet, Packet753, PlayClientPluginMessageSpec, PlayServerPlayerPositionAndLookSpec, PositionAndLookFlags, PreviousGameMode, RawPacket753 as RawPacket, StatusResponseSpec};
+use mcproto_rs::v1_16_3::{AdvancementMappingEntrySpec, ChatPosition, ChunkData, GameMode, HandshakeNextState, LoginEncryptionRequestSpec, LoginSetCompressionSpec, LoginSuccessSpec, Packet753 as Packet, Packet753, PlayClientPluginMessageSpec, PlayServerPlayerPositionAndLookSpec, PositionAndLookFlags, PreviousGameMode, RawPacket753 as RawPacket, StatusResponseSpec};
 use mcproto_rs::v1_16_3::CommandParserSpec::NbtCompoundTag;
 use mcproto_rs::v1_16_3::Packet753::{PlayClientPluginMessage, PlayServerPlayerPositionAndLook};
 use tokio::io::AsyncWriteExt;
@@ -664,7 +664,22 @@ impl ServerClient {
 
         self.connection.write_packet(PlayServerPlayerPositionAndLook(pos_and_look)).await;
 
+        let chunk_data = ChunkData {
+            position: ChunkPosition {
+                x: 0,
+                z: 0,
+            },
+            primary_bit_mask: VarInt::from(1),
+            block_entities: vec![],
+            heightmaps: NamedNbtTag {
+                root: NamedTag {
+                    name: String::from("MOTION_BLOCKING"),
+                    payload: Tag::LongArray(vec![
 
+                    ]),
+                }
+            },
+        };
 
         Ok(())
     }
