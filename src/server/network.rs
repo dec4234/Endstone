@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::{Arc};
 use mcproto_rs::status::{StatusFaviconSpec, StatusPlayersSpec, StatusSpec, StatusVersionSpec};
-use mcproto_rs::types::{Chat, ChunkPosition, CountedArray, EntityLocation, EntityRotation, NamedNbtTag, RemainingBytes, VarInt, Vec3};
+use mcproto_rs::types::{Chat, ChunkPosition, CountedArray, EntityLocation, EntityRotation, ItemStack, NamedNbtTag, RemainingBytes, VarInt, Vec3};
 use mcproto_rs::uuid::UUID4;
 use mctokio::{Bridge, TcpConnection, TcpReadBridge, TcpWriteBridge};
 use tokio::runtime::Runtime;
@@ -664,6 +664,9 @@ impl ServerClient {
 
         self.connection.write_packet(PlayServerPlayerPositionAndLook(pos_and_look)).await;
 
+        let mut inventory: Vec<Option<ItemStack>> = vec![None; 46];
+
+        /*
         let chunk_data = ChunkData {
             position: ChunkPosition {
                 x: 0,
@@ -680,6 +683,7 @@ impl ServerClient {
                 }
             },
         };
+         */
 
         Ok(())
     }
