@@ -1,6 +1,9 @@
 # Endstone
 An in-progress Minecraft Server implementation in Rust.
 
+**Currently Broken**
+I plan on picking this project back up in the future, in the mean time I am getting the experience necessary to make something like this from other projects.
+
 ## Use
 Currently, you must clone the project yourself and run using ```cargo run```
 
