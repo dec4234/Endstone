@@ -1,16 +1,14 @@
 use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
+use std::net::{SocketAddr};
 use std::sync::{Arc};
 use mcproto_rs::status::{StatusFaviconSpec, StatusPlayersSpec, StatusSpec, StatusVersionSpec};
 use mcproto_rs::types::{Chat, ChunkPosition, CountedArray, EntityLocation, EntityRotation, ItemStack, NamedNbtTag, RemainingBytes, VarInt, Vec3};
 use mcproto_rs::uuid::UUID4;
-use mctokio::{Bridge, TcpConnection, TcpReadBridge, TcpWriteBridge};
 use tokio::runtime::Runtime;
 use tokio::sync::{Mutex, MutexGuard};
 use anyhow::{anyhow, Result};
 use mcproto_rs::protocol::State;
 use mcproto_rs::protocol::State::Play;
-use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::Receiver;
 use mcproto_rs::{v1_16_3 as proto};
 use mcproto_rs::nbt::{NamedTag, Tag};
@@ -18,6 +16,7 @@ use mcproto_rs::v1_16_3::{AdvancementMappingEntrySpec, ChatPosition, ChunkData, 
 use mcproto_rs::v1_16_3::CommandParserSpec::NbtCompoundTag;
 use mcproto_rs::v1_16_3::Packet753::{PlayClientPluginMessage, PlayServerPlayerPositionAndLook};
 use tokio::io::AsyncWriteExt;
+use tokio::net::TcpListener;
 use crate::server::player::Player;
 use crate::server::client::Client;
 
@@ -76,7 +75,7 @@ impl Server {
 
         loop {
             if let Err(err) = receiver.try_recv() {
-                if err == tokio::sync::mpsc::error::TryRecvError::Closed {
+                if err == tokio::sync::mpsc::error::TryRecvError::Disconnected {
                     break;
                 }
 
@@ -191,7 +190,9 @@ impl Server {
                             } else {
                                 let status: Result<()>;
                                 {
+                                    println!("Before");
                                     status = self_join_arc.lock().await.handle_status(client).await;
+                                    println!("After");
                                 }
                                 if let Ok(_) = status {
                                     println!(
@@ -340,7 +341,9 @@ impl Server {
         use Packet::{StatusPing, StatusPong, StatusRequest};
         use mcproto_rs::status::StatusPlayerSampleSpec;
         use proto::{StatusPongSpec};
+        println!("before next read");
         let second = &mut client.read_next_packet().await;
+        println!("Read next");
         if let Ok(second) = second {
             if let Some(StatusRequest(_)) = second {
                 {

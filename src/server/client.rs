@@ -1,39 +1,36 @@
 use std::sync::Arc;
 use mcproto_rs::{v1_16_3 as proto, v1_16_3::Packet753 as Packet, v1_16_3::RawPacket753 as RawPacket};
-use mctokio::{Bridge, TcpConnection, TcpReadBridge, TcpWriteBridge};
 use tokio::sync::Mutex;
 use anyhow::{anyhow, Result};
-use mcproto_rs::protocol::State;
+use craftio_rs::{CraftAsyncReader, CraftAsyncWriter, CraftConnection, CraftIo, CraftSyncReader, CraftSyncWriter, CraftTcpConnection, CraftTokioConnection};
+use mcproto_rs::protocol::{PacketDirection, State};
 use mcproto_rs::v1_16_3::HandshakeNextState;
+use tokio::io::BufReader;
 use tokio::net::TcpStream;
 
 pub struct Client {
-    reader: Arc<Mutex<TcpReadBridge>>,
-    writer: Arc<Mutex<TcpWriteBridge>>,
+    connection: Arc<Mutex<CraftTokioConnection>>,
 }
 
 impl Client {
-    pub fn new(stream: TcpConnection) -> Self {
-        Self {
-            reader: Arc::new(Mutex::new(stream.reader)),
-            writer: Arc::new(Mutex::new(stream.writer)),
-        }
-    }
-
     pub fn from_tcp_stream(connection: TcpStream) -> Self {
-        Self::new(TcpConnection::from_client_connection(connection))
+        let split = connection.into_split();
+        Self {
+            connection: Arc::new(Mutex::new(CraftTokioConnection::from_async((BufReader::new(split.0), split.1), PacketDirection::ServerBound))),
+        }
     }
 
     pub async fn write_packet(&mut self, packet: Packet) -> Result<()> {
         println!("Server -> Client: {:?}", packet);
-        self.writer.lock().await.write_packet(packet).await
+        self.connection.lock().await.write_packet_async(packet).await;
+        Ok(())
     }
 
     pub async fn read_next_packet(&mut self) -> Result<Option<Packet>> {
-        if let Some(raw) = self.reader.lock().await.read_packet::<RawPacket>().await? {
-            let packet = mcproto_rs::protocol::RawPacket::deserialize(&raw)?;
-            println!("Client -> Server: {:?}", packet);
-            Ok(Some(packet))
+        if let Some(raw) = self.connection.clone().lock().await.read_raw_packet_async::<RawPacket>().await? {
+            println!("Client -> Server: {:?}", &raw);
+            Ok(Some(mcproto_rs::protocol::RawPacket::deserialize(&raw)?))
+            // Ok(Some(raw))
         } else {
             Ok(None)
         }
@@ -62,22 +59,26 @@ impl Client {
     }
 
     pub async fn set_state(&mut self, state: State) {
+        self.connection.lock().await.set_state(state);
+        /*
         self.reader.lock().await.set_state(state.clone());
         self.writer.lock().await.set_state(state);
+         */
     }
 
     pub async fn set_compression_threshold(&mut self, threshold: i32) {
-        self.reader.lock().await.set_compression_threshold(Some(threshold));
-        self.writer.lock().await.set_compression_threshold(Some(threshold));
+        self.connection.lock().await.set_compression_threshold(Some(threshold));
+        self.connection.lock().await.set_compression_threshold(Some(threshold));
     }
 
     pub async fn enable_encryption(&mut self, key: &[u8], iv: &[u8]) -> Result<()> {
-        let reader = self.reader.lock().await.enable_encryption(key, iv);
+        let reader = self.connection.lock().await.enable_encryption(key, iv);
 
         if let Err(error) = reader {
-            Err(error)
+            Err(anyhow!("Encryption Error {:?}", error))
         } else {
-            self.writer.lock().await.enable_encryption(key, iv)
+            self.connection.lock().await.enable_encryption(key, iv);
+            Ok(())
         }
     }
 }
