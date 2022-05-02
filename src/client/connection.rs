@@ -1,5 +1,7 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::net::TcpStream;
+use std::sync::Arc;
+use std::sync::mpsc::Sender;
 use craftio_rs::{CraftIo, CraftSyncReader, CraftSyncWriter, CraftTcpConnection, CraftWrapper};
 use mcproto_rs::protocol::{Packet as PacketT, PacketDirection, RawPacket as RawPacketT, State};
 use anyhow::{anyhow, Result};
@@ -7,7 +9,8 @@ use log::info;
 use mcproto_rs::status::{StatusFaviconSpec, StatusPlayersSpec, StatusSpec, StatusVersionSpec};
 use mcproto_rs::types::Chat;
 use mcproto_rs::{v1_16_3 as proto, v1_16_3::Packet753 as Packet, v1_16_3::RawPacket753 as RawPacket};
-use mcproto_rs::v1_16_3::{HandshakeNextState, StatusResponseSpec};
+use mcproto_rs::v1_16_3::{HandshakeNextState, RawPacket753, StatusResponseSpec};
+use tokio::sync::Mutex;
 
 pub struct MinecraftClient {
     connection: CraftTcpConnection,
@@ -21,12 +24,10 @@ impl MinecraftClient {
     }
 
     pub fn from_stream(stream: TcpStream) -> Self {
-        Self {
-            connection: CraftTcpConnection::from_std(stream, PacketDirection::ServerBound).unwrap(),
-        }
+        MinecraftClient::new(CraftTcpConnection::from_std(stream, PacketDirection::ServerBound).unwrap())
     }
 
-    pub fn write_packet<P>(&mut self, packet: P) -> Result<()> where P: PacketT + Debug {
+    pub fn write_packet<'a, R: RawPacketT<'a>>(&mut self, packet: R::Packet) -> Result<()> where R::Packet: Debug {
         info!("Outgoing: {:?}", packet);
 
         if let Err(t) = self.connection.write_packet(packet) {
@@ -36,7 +37,7 @@ impl MinecraftClient {
         Ok(())
     }
 
-    pub fn read_next_packet<'a, P: PacketT + Debug, R: RawPacketT<'a, Packet = P>>(&'a mut self) -> Result<Option<P>> {
+    pub fn read_next_packet<'b, R: RawPacketT<'b>>(&'b mut self) -> Result<Option<R::Packet>> where R::Packet: Debug {
         if let Some(raw) = self.connection.read_packet::<R>()? {
             info!("Incoming: {:?}", &raw);
 
@@ -53,7 +54,7 @@ impl MinecraftClient {
     pub fn handshake(&mut self) -> Result<State> {
         // self.connection.set_compression_threshold(Some(512));
 
-        let first = self.read_next_packet::<Packet, RawPacket>();
+        let first = self.read_next_packet::<RawPacket753>();
 
         if let Ok(first) = first {
             if let Some(Packet::Handshake(body)) = first {
@@ -97,6 +98,6 @@ impl ServerStatus {
             response: clon,
         };
 
-        client.write_packet(Packet::StatusResponse(response))
+        client.write_packet::<RawPacket753>(Packet::StatusResponse(response))
     }
 }

@@ -7,7 +7,6 @@ use log4rs::Config;
 use log4rs::config::{Appender, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use log::LevelFilter;
-use tokio::runtime::Runtime;
 use tokio::{sync::{mpsc, Mutex}};
 use crate::client::connection::{MinecraftClient, ServerStatus};
 use mcproto_rs::{v1_16_3 as proto, v1_16_3::Packet753 as Packet, v1_16_3::RawPacket753 as RawPacket};
@@ -18,6 +17,7 @@ use crate::server::server::Server;
 
 pub mod server;
 pub mod client;
+pub mod ecs;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -59,7 +59,7 @@ async fn async_main() -> Result<()> {
         favicon: None,
     };
 
-    let server = Server::<Packet>::new(25565, status);
+    let server = Server::<RawPacket>::new(25565, status);
 
     Server::start(server).await.unwrap();
 
@@ -105,11 +105,11 @@ async fn testing() {
         status.send_status(&mut client).unwrap();
 
         loop {
-            if let Ok(r) = client.read_next_packet::<Packet, RawPacket>() {
+            if let Ok(r) = client.read_next_packet::<RawPacket>() {
                 if let Some(packet) = r {
                     match packet {
                         Packet::StatusPing(pack) => {
-                            client.write_packet(Packet::StatusPong(StatusPongSpec {
+                            client.write_packet::<RawPacket>(Packet::StatusPong(StatusPongSpec {
                                 payload: pack.payload,
                             })).unwrap()
                         }

@@ -10,8 +10,8 @@ log = "0.4.0"
 anyhow = "1.0.52"
 tokio = { version = "1.18.0", features = ["full"] }
 mcproto-rs = "0.2.0"
-craftio-rs = "0.1.0"
-openssl = {version = "0.10.30", features = ["vendored"]}
+craftio-rs = {version = "0.1.0"}
+openssl = { version = "0.10.30", features = ["vendored"]}
 serde_json = "1.0.59"
 serde = "1.0.117"
 reqwest = "0.10.8"
