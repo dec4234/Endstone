@@ -49,7 +49,7 @@ async fn async_main() -> Result<()> {
         description: Chat::from_traditional("&c&lThis is a test message\n&d&lTest second line &kjbb", true),
         version: StatusVersionSpec {
             name: String::from("test"),
-            protocol: 578,
+            protocol: 753,
         },
         players: StatusPlayersSpec {
             max: 7,
@@ -59,7 +59,7 @@ async fn async_main() -> Result<()> {
         favicon: None,
     };
 
-    let server = Server::<RawPacket>::new(25565, status);
+    let server = Server::new(25565, status);
 
     Server::start(server).await.unwrap();
 
@@ -79,6 +79,7 @@ async fn start_server(address: SocketAddr, description: String, online: bool, ru
 }
  */
 
+/*
 async fn testing() {
     let bind = TcpListener::bind(SocketAddr::new(IpAddr::from(Ipv4Addr::LOCALHOST), 25565)).unwrap();
 
@@ -105,11 +106,11 @@ async fn testing() {
         status.send_status(&mut client).unwrap();
 
         loop {
-            if let Ok(r) = client.read_next_packet::<RawPacket>() {
+            if let Ok(r) = client.read_next_packet() {
                 if let Some(packet) = r {
                     match packet {
                         Packet::StatusPing(pack) => {
-                            client.write_packet::<RawPacket>(Packet::StatusPong(StatusPongSpec {
+                            client.write_packet(Packet::StatusPong(StatusPongSpec {
                                 payload: pack.payload,
                             })).unwrap()
                         }
@@ -120,3 +121,4 @@ async fn testing() {
         }
     }
 }
+ */
