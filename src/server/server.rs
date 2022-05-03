@@ -91,7 +91,12 @@ impl<R: 'static +  RawPacket<'static> + Send + Debug> Server<R> {
         for c in self.conns.as_mut_slice() {
             let packet = c.read_next_packet::<R>();
 
+            match packet {
 
+                _ => {}
+            }
         }
     }
+
+
 }
