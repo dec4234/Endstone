@@ -11,6 +11,7 @@ use log::{info, log, warn};
 use mcproto_rs::protocol::{RawPacket as RawPacketT};
 use mcproto_rs::{v1_16_3::Packet753 as Packet, v1_16_3::RawPacket753 as RawPacket};
 use mcproto_rs::uuid::UUID4;
+use mcproto_rs::v1_15_2::Packet578Kind::PlayEditBook;
 use mcproto_rs::v1_16_3::StatusPongSpec;
 use tokio::time::Instant;
 use crate::{MinecraftClient, ServerStatus};
@@ -33,7 +34,7 @@ impl Server {
                 addr: SocketAddr::new(ip, port),
                 status,
                 conns: Vec::new(),
-                packet_channel: mpsc::channel()
+                packet_channel: mpsc::channel(),
             }))
     }
 
@@ -49,7 +50,6 @@ impl Server {
 
     /// Handles server start up activities and spawns a thread to process new connections
     pub async fn start(server: Arc<Mutex<Server>>) -> Result<()> {
-
         let bind = TcpListener::bind(server.lock().await.addr)?;
 
         let slock = server.clone();
@@ -57,12 +57,19 @@ impl Server {
         tokio::spawn(async move {
             loop {
                 if let Ok(conn) = bind.accept() {
-                    let mut client = MinecraftClient::from_stream(conn.0, slock.lock().await.packet_channel.0.clone());
-                    if let Ok(handshake) = client.handshake() {
-                        if let Ok(_) = slock.lock().await.status.send_status(&mut client) {
+                    let uuid = UUID4::random();
+
+                    let mut lock = slock.lock().await;
+
+                    let mut client = MinecraftClient::from_stream(conn.0, lock.packet_channel.0.clone(), uuid);
+                    let mut clock = client.lock().await;
+
+                    if let Ok(handshake) = clock.handshake() {
+                        if let Ok(_) = lock.status.send_status(&mut clock) {
                             // If everything goes okay, add connection to list
                             info!("Established Connection with {}", conn.1);
-                            slock.lock().await.conns.push((Arc::new(Mutex::new(client)), UUID4::random()));
+
+                            lock.conns.push((client.clone(), uuid));
                         } else {
                             warn!("Failed to send status to: {}", conn.1);
                         }
@@ -79,51 +86,56 @@ impl Server {
     }
 
     pub async fn do_tick_loop(server: Arc<Mutex<Server>>) -> Result<()> {
-        let mut start= Instant::now();
+        let mut start = Instant::now();
 
         let server = server.clone();
 
-        tokio::spawn(async move {
-            loop {
-                start = Instant::now();
-                println!("tick");
+        loop {
+            start = Instant::now();
+            println!("tick");
 
-                server.lock().await.handle_packets().await;
+            Server::handle_packets(server.clone()).await;
 
-                let elapsed = start.elapsed();
-                let diff = 50 - elapsed.as_millis();
+            let elapsed = start.elapsed();
+            let diff = 50 - elapsed.as_millis();
 
-                if diff > 0 {
-                    thread::sleep(Duration::from_millis(diff as u64));
-                }
+            if diff > 0 {
+                thread::sleep(Duration::from_millis(diff as u64));
             }
-        });
+        }
 
         Ok(())
     }
 
-    pub async fn handle_packets(&mut self) {
-        /*
-            for packet in self.packet_channel.1.iter() {
-                if let Some(client) = self.get_client(packet.clientID) {
-                    let mut c = client.lock().await;
+    pub async fn handle_packets(server: Arc<Mutex<Server>>) {
+        let server = server.lock().await;
 
-                    match packet.packet {
-                        Packet::StatusRequest(spec) => {
-                            self.status.send_status(c.borrow_mut());
-                        }
-                        Packet::StatusPing(ping) => {
-                            c.write_packet(Packet::StatusPong(StatusPongSpec {
-                                payload: ping.payload,
-                            }));
-                        }
-                        _ => {}
+        println!("{}", server.conns.len());
+
+        while let Ok(packet) = server.packet_channel.1.try_recv() {
+            if let Some(client) = server.get_client(packet.clientID) {
+                let mut c = client.lock().await;
+
+                match packet.packet {
+                    Packet::StatusRequest(spec) => {
+                        server.status.send_status(c.borrow_mut());
                     }
+                    Packet::StatusPing(ping) => {
+                        c.write_packet(Packet::StatusPong(StatusPongSpec {
+                            payload: ping.payload,
+                        }));
+                    }
+                    _ => {}
                 }
             }
-         */
+        }
 
-        for con in self.conns.as_mut_slice() {
+        /*
+        let lock = server.lock().await;
+
+        println!("start {}", lock.conns.len());
+
+        for con in lock.conns.iter() {
             println!("ran");
             let mut c = con.0.lock().await;
             let packet = c.read_next_packet();
@@ -132,7 +144,7 @@ impl Server {
             if let Ok(Some(packet)) = packet {
                 match packet {
                     Packet::StatusRequest(spec) => {
-                        self.status.send_status(c.borrow_mut());
+                        lock.status.send_status(c.borrow_mut());
                     }
                     Packet::StatusPing(ping) => {
                         c.write_packet(Packet::StatusPong(StatusPongSpec {
@@ -147,8 +159,7 @@ impl Server {
                 break;
             }
         }
-
-        println!("out");
+        */
     }
 }
 

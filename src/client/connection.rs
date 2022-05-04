@@ -1,6 +1,9 @@
 use std::fmt::{Debug, Display};
 use std::net::TcpStream;
+use std::sync::{Arc};
 use std::sync::mpsc::Sender;
+use std::thread;
+use std::time::{Duration, Instant};
 use craftio_rs::{CraftIo, CraftSyncReader, CraftSyncWriter, CraftTcpConnection, CraftWrapper};
 use mcproto_rs::protocol::{Packet as PacketT, PacketDirection, RawPacket as RawPacketT, State};
 use anyhow::{anyhow, Result};
@@ -8,24 +11,30 @@ use log::info;
 use mcproto_rs::status::{StatusFaviconSpec, StatusPlayersSpec, StatusSpec, StatusVersionSpec};
 use mcproto_rs::types::Chat;
 use mcproto_rs::{v1_16_3 as proto, v1_16_3::Packet753 as Packet, v1_16_3::RawPacket753 as RawPacket};
+use mcproto_rs::uuid::UUID4;
 use mcproto_rs::v1_16_3::{HandshakeNextState, RawPacket753, StatusResponseSpec};
+use tokio::sync::Mutex;
 use crate::server::server::PacketBox;
 
 pub struct MinecraftClient {
     connection: CraftTcpConnection,
     sender: Sender<PacketBox>,
+    uuid: UUID4,
 }
 
 impl MinecraftClient {
-    fn new(connection: CraftTcpConnection, sender: Sender<PacketBox>) -> Self {
+    fn new(connection: CraftTcpConnection, sender: Sender<PacketBox>, uuid: UUID4) -> Self {
         Self {
             connection,
             sender,
+            uuid,
         }
     }
 
-    pub fn from_stream(stream: TcpStream, sender: Sender<PacketBox>) -> Self {
-        let client = MinecraftClient::new(CraftTcpConnection::from_std(stream, PacketDirection::ServerBound).unwrap(), sender);
+    pub fn from_stream(stream: TcpStream, sender: Sender<PacketBox>, uuid: UUID4) -> Arc<Mutex<Self>> {
+        let mut client = Arc::new(Mutex::new(MinecraftClient::new(CraftTcpConnection::from_std(stream, PacketDirection::ServerBound).unwrap(), sender, uuid)));
+
+        MinecraftClient::broadcast_packets(client.clone()).unwrap();
 
         client
     }
@@ -50,10 +59,31 @@ impl MinecraftClient {
         }
     }
 
-    pub fn broadcast_packets(&mut self) -> Result<()> {
+    pub fn broadcast_packets(sel: Arc<Mutex<MinecraftClient>>) -> Result<()> {
 
         tokio::spawn(async move {
+            let sender = sel.lock().await.sender.clone();
 
+            let mut start = Instant::now();
+
+            loop {
+                start = Instant::now();
+
+                let mut slock = sel.lock().await;
+
+                let packet = slock.read_next_packet();
+
+                if let Ok(Some(packet)) = packet {
+                    sender.send(PacketBox::new(slock.uuid, packet));
+                }
+
+                let elapsed = start.elapsed();
+                let diff = 10 - elapsed.as_millis();
+
+                if diff > 0 {
+                    thread::sleep(Duration::from_millis(diff as u64));
+                }
+            }
         });
 
         Ok(())
