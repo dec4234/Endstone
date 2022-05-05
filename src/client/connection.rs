@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Display};
+use std::io::Read;
 use std::net::TcpStream;
 use std::sync::{Arc};
 use std::sync::mpsc::Sender;
@@ -19,7 +20,8 @@ use crate::server::server::PacketBox;
 pub struct MinecraftClient {
     connection: CraftTcpConnection,
     sender: Sender<PacketBox>,
-    uuid: UUID4,
+    pub uuid: UUID4,
+    pub previous: Option<Packet>,
 }
 
 impl MinecraftClient {
@@ -28,13 +30,12 @@ impl MinecraftClient {
             connection,
             sender,
             uuid,
+            previous: None,
         }
     }
 
     pub fn from_stream(stream: TcpStream, sender: Sender<PacketBox>, uuid: UUID4) -> Arc<Mutex<Self>> {
-        let mut client = Arc::new(Mutex::new(MinecraftClient::new(CraftTcpConnection::from_std(stream, PacketDirection::ServerBound).unwrap(), sender, uuid)));
-
-        MinecraftClient::broadcast_packets(client.clone()).unwrap();
+        let client = Arc::new(Mutex::new(MinecraftClient::new(CraftTcpConnection::from_std(stream, PacketDirection::ServerBound).unwrap(), sender, uuid)));
 
         client
     }
@@ -52,6 +53,8 @@ impl MinecraftClient {
     pub fn read_next_packet(&mut self) -> Result<Option<Packet>> {
         if let Some(raw) = self.connection.read_packet::<RawPacket>()? {
             info!("Incoming: {:?}", &raw);
+
+            self.previous = Some(raw.clone());
 
             Ok(Some(raw))
         } else {
@@ -114,8 +117,13 @@ impl MinecraftClient {
                 return Err(anyhow!("No handshake received"));
             }
         } else {
+            println!("First Error");
             return Err(first.err().unwrap());
         }
+    }
+
+    pub fn enable_compression(&mut self) {
+        self.connection.set_compression_threshold(Some(256));
     }
 }
 

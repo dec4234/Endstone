@@ -6,15 +6,17 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::{Duration};
 use tokio::sync::Mutex;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use log::{info, log, warn};
-use mcproto_rs::protocol::{RawPacket as RawPacketT};
+use mcproto_rs::protocol::{RawPacket as RawPacketT, State};
 use mcproto_rs::{v1_16_3::Packet753 as Packet, v1_16_3::RawPacket753 as RawPacket};
+use mcproto_rs::types::VarInt;
 use mcproto_rs::uuid::UUID4;
 use mcproto_rs::v1_15_2::Packet578Kind::PlayEditBook;
-use mcproto_rs::v1_16_3::StatusPongSpec;
+use mcproto_rs::v1_16_3::{HandshakeNextState, LoginSetCompressionSpec, Packet753, StatusPongSpec};
 use tokio::time::Instant;
 use crate::{MinecraftClient, ServerStatus};
+use crate::client::player::Player;
 
 pub struct Server {
     pub addr: SocketAddr,
@@ -61,20 +63,38 @@ impl Server {
 
                     let mut lock = slock.lock().await;
 
-                    let mut client = MinecraftClient::from_stream(conn.0, lock.packet_channel.0.clone(), uuid);
+                    let client = MinecraftClient::from_stream(conn.0, lock.packet_channel.0.clone(), uuid);
                     let mut clock = client.lock().await;
 
                     if let Ok(handshake) = clock.handshake() {
-                        if let Ok(_) = lock.status.send_status(&mut clock) {
+                        if handshake == State::Status {
+                            if let Ok(_) = lock.status.send_status(&mut clock) {
+                                info!("Send status to: {}", conn.1);
+                            } else {
+                                warn!("Failed to send status to: {}", conn.1);
+                            }
+                        } else if handshake == State::Login {
                             // If everything goes okay, add connection to list
-                            info!("Established Connection with {}", conn.1);
+                            // tick loop doesn't start soon enough
+
+                            MinecraftClient::broadcast_packets(client.clone()).unwrap();
+
+                            let packet = clock.read_next_packet();
+
+                            drop(clock);
+
+                            if let Ok(Some(packet)) = packet {
+
+                            }
+
+                            // println!("{:?}", clock.read_next_packet().unwrap().unwrap()); // Read missed Login Start Packet
 
                             lock.conns.push((client.clone(), uuid));
-                        } else {
-                            warn!("Failed to send status to: {}", conn.1);
+
+                            info!("Established Connection with {}", conn.1);
                         }
                     } else {
-                        warn!("Failed to send handshake to: {}", conn.1);
+                        warn!("Failed to handshake with: {}", conn.1);
                     }
                 }
             }
@@ -92,7 +112,6 @@ impl Server {
 
         loop {
             start = Instant::now();
-            println!("tick");
 
             Server::handle_packets(server.clone()).await;
 
@@ -110,15 +129,14 @@ impl Server {
     pub async fn handle_packets(server: Arc<Mutex<Server>>) {
         let server = server.lock().await;
 
-        println!("{}", server.conns.len());
-
         while let Ok(packet) = server.packet_channel.1.try_recv() {
             if let Some(client) = server.get_client(packet.clientID) {
                 let mut c = client.lock().await;
 
                 match packet.packet {
+
                     Packet::StatusRequest(spec) => {
-                        server.status.send_status(c.borrow_mut());
+                        server.status.send_status(&mut c);
                     }
                     Packet::StatusPing(ping) => {
                         c.write_packet(Packet::StatusPong(StatusPongSpec {
@@ -129,37 +147,40 @@ impl Server {
                 }
             }
         }
+    }
 
-        /*
-        let lock = server.lock().await;
+    pub async fn handle_login(&mut self, client: Arc<Mutex<MinecraftClient>>, packet: Packet) -> Result<Player> {
+        let mut name = String::new();
 
-        println!("start {}", lock.conns.len());
-
-        for con in lock.conns.iter() {
-            println!("ran");
-            let mut c = con.0.lock().await;
-            let packet = c.read_next_packet();
-            println!("read");
-
-            if let Ok(Some(packet)) = packet {
-                match packet {
-                    Packet::StatusRequest(spec) => {
-                        lock.status.send_status(c.borrow_mut());
-                    }
-                    Packet::StatusPing(ping) => {
-                        c.write_packet(Packet::StatusPong(StatusPongSpec {
-                            payload: ping.payload,
-                        }));
-                    }
-                    _ => {}
-                }
-
-                break;
-            } else {
-                break;
+        match packet {
+            Packet::LoginStart(spec) => {
+                name = spec.name;
+            }
+            _ => {
+                return Err(anyhow!("Found a packet other than LoginStart"));
             }
         }
-        */
+
+        let mut clock = client.lock().await;
+
+        clock.write_packet(Packet::LoginSetCompression(LoginSetCompressionSpec {
+            threshold: VarInt(256),
+        }))?;
+
+        clock.enable_compression();
+
+        Err(anyhow!("temp error"))
+    }
+}
+
+pub fn convert(handshake: HandshakeNextState) -> State {
+    match handshake {
+        HandshakeNextState::Status => {
+            State::Status
+        }
+        HandshakeNextState::Login => {
+            State::Login
+        }
     }
 }
 
