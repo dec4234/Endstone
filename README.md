@@ -1,8 +1,7 @@
 # Endstone
-An in-progress Minecraft Server implementation in Rust.
+A Minecraft Queue Server, Similar to 2b2t's developed in Rust.
 
-**Currently Broken**
-I plan on picking this project back up in the future, in the mean time I am getting the experience necessary to make something like this from other projects.
+Work is on-going.
 
 ## Use
 Currently, you must clone the project yourself and run using ```cargo run```
@@ -15,10 +14,10 @@ The server is run on ```localhost:25565```
 ## Libraries
 **[MCPROTO-RS](https://github.com/Twister915/mcproto-rs)** - Used to manipulate and set up packets to be sent using MCTokio
 
-**[MCTokio](https://github.com/Twister915/mctokio)** - Library used to interpret and write Minecraft protocol packets to and from real Minecraft clients and servers.
+**[craftio-rs](https://github.com/Twister915/craftio-rs)** - Library used to interpret and write Minecraft protocol packets to and from real Minecraft clients and servers.
 
 ## References
-The following public projects were instrumental in setting up the most basic features. Some code for critical functions may be sourced from these.
+The following public projects were incredibly useful in understanding how a Minecraft Server would be developed in Rust.
 
 **[MCHPRS](https://github.com/MCHPR/MCHPRS)** - Minecraft High Performance Redstone Server an implementation specifically desgined around ideal performance for large scale redstone builds. 
 

@@ -84,7 +84,16 @@ impl Server {
                             drop(clock);
 
                             if let Ok(Some(packet)) = packet {
+                                let r = lock.handle_login(client.clone(), packet).await;
 
+                                if let Ok(player) = r {
+                                    // ADD player to list of connections inside server
+
+
+                                    info!("Established Connection with {} under name: \"{}\"", conn.1, player.name);
+                                } else {
+                                    warn!("Failed to establish connection with {} - {}", conn.1, r.err().unwrap());
+                                }
                             }
 
                             // println!("{:?}", clock.read_next_packet().unwrap().unwrap()); // Read missed Login Start Packet
