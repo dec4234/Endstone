@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::fmt::{Debug, Display};
 use std::io::Read;
 use std::net::TcpStream;
@@ -15,12 +16,13 @@ use mcproto_rs::{v1_16_3 as proto, v1_16_3::Packet753 as Packet, v1_16_3::RawPac
 use mcproto_rs::uuid::UUID4;
 use mcproto_rs::v1_16_3::{HandshakeNextState, RawPacket753, StatusResponseSpec};
 use tokio::sync::Mutex;
+use crate::client::player::Player;
 use crate::server::server::PacketBox;
 
 pub struct MinecraftClient {
     connection: CraftTcpConnection,
-    sender: Sender<PacketBox>,
-    pub uuid: UUID4,
+    sender: Sender<PacketBox>, // remove?
+    pub uuid: UUID4, // remove?
     pub previous: Option<Packet>,
 }
 
@@ -34,8 +36,8 @@ impl MinecraftClient {
         }
     }
 
-    pub fn from_stream(stream: TcpStream, sender: Sender<PacketBox>, uuid: UUID4) -> Arc<Mutex<Self>> {
-        let client = Arc::new(Mutex::new(MinecraftClient::new(CraftTcpConnection::from_std(stream, PacketDirection::ServerBound).unwrap(), sender, uuid)));
+    pub fn from_stream(stream: TcpStream, sender: Sender<PacketBox>, uuid: UUID4) -> Self {
+        let client = MinecraftClient::new(CraftTcpConnection::from_std(stream, PacketDirection::ServerBound).unwrap(), sender, uuid);
 
         client
     }
@@ -44,7 +46,7 @@ impl MinecraftClient {
         info!("Outgoing: {:?}", packet);
 
         if let Err(t) = self.connection.write_packet(packet) {
-            return Err(anyhow!("Failed to send packet!"));
+            return Err(anyhow!("Failed to send packet! - {:?}", t));
         }
 
         Ok(())
@@ -62,7 +64,7 @@ impl MinecraftClient {
         }
     }
 
-    pub fn broadcast_packets(sel: Arc<Mutex<MinecraftClient>>) -> Result<()> {
+    pub fn broadcast_packets(sel: Arc<Mutex<Player>>) -> Result<()> {
 
         tokio::spawn(async move {
             let sender = sel.lock().await.sender.clone();
@@ -74,10 +76,10 @@ impl MinecraftClient {
 
                 let mut slock = sel.lock().await;
 
-                let packet = slock.read_next_packet();
+                let packet = slock.client.read_next_packet();
 
                 if let Ok(Some(packet)) = packet {
-                    sender.send(PacketBox::new(slock.uuid, packet));
+                    sender.send(PacketBox::new(slock.id, packet));
                 }
 
                 let elapsed = start.elapsed();
