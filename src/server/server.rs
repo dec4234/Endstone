@@ -163,6 +163,7 @@ impl Server {
         }
     }
 
+    // https://github.com/MCHPR/MCHPRS/blob/13f4a708889ae5c6b5e248f6f14c8dc246019fe8/src/server.rs#L319
     pub async fn handle_login(&mut self, mut client: MinecraftClient, packet: Packet) -> Result<Player> {
         let mut name = String::new();
 

@@ -63,10 +63,6 @@ async fn async_main() -> Result<()> {
 
     Server::start(server).await.unwrap();
 
-    loop {
-
-    }
-
     Ok(())
 }
 

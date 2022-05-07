@@ -6,13 +6,13 @@ Work is on-going.
 ## Use
 Currently, you must clone the project yourself and run using ```cargo run```
 
-Additionally, the **openssl** dependency requires Perl to be installed on the computer in order for it to be compiled.
+Additionally, the **openssl** dependency requires [Perl](https://strawberryperl.com/) to be installed on the computer in order for it to be compiled.
 
 Endstone currently supports Java Edition version **1.16.3** (Protocol 753).
 The server is run on ```localhost:25565```
 
 ## Libraries
-**[MCPROTO-RS](https://github.com/Twister915/mcproto-rs)** - Used to manipulate and set up packets to be sent using MCTokio
+**[mcproto-rs](https://github.com/Twister915/mcproto-rs)** - Used to manipulate and set up packets to be sent using craftio.
 
 **[craftio-rs](https://github.com/Twister915/craftio-rs)** - Library used to interpret and write Minecraft protocol packets to and from real Minecraft clients and servers.
 
